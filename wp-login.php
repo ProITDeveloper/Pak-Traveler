@@ -811,6 +811,68 @@ switch ( $action ) {
 			}
 		}
 
+		$registration_redirect = ! empty( $_REQUEST['redirect_to'] ) ? $_REQUEST['redirect_to'] : '';
+		/**
+		 * Filters the registration redirect URL.
+		 *
+		 * @since 3.0.0
+		 *
+		 * @param string $registration_redirect The redirect destination URL.
+		 */
+		$redirect_to = apply_filters( 'registration_redirect', $registration_redirect );
+		login_header( __( 'Registration Form' ), '<p class="message register">' . __( 'Register For This Site' ) . '</p>', $errors );
+		?>
+	<form name="registerform" id="registerform" action="<?php echo esc_url( site_url( 'wp-login.php?action=register', 'login_post' ) ); ?>" method="post" novalidate="novalidate">
+	<p>
+		<label for="user_login"><?php _e( 'Username' ); ?><br />
+		<input type="text" name="user_login" id="user_login" class="input" value="<?php echo esc_attr( wp_unslash( $user_login ) ); ?>" size="20" autocapitalize="off" /></label>
+	</p>
+	<p>
+		<label for="user_email"><?php _e( 'Email' ); ?><br />
+		<input type="email" name="user_email" id="user_email" class="input" value="<?php echo esc_attr( wp_unslash( $user_email ) ); ?>" size="25" /></label>
+	</p>
+		<?php
+		/**
+		 * Fires following the 'Email' field in the user registration form.
+		 *
+		 * @since 2.1.0
+		 */
+		do_action( 'register_form' );
+		?>
+	<p id="reg_passmail"><?php _e( 'Registration confirmation will be emailed to you.' ); ?></p>
+	<br class="clear" />
+	<input type="hidden" name="redirect_to" value="<?php echo esc_attr( $redirect_to ); ?>" />
+	<p class="submit"><input type="submit" name="wp-submit" id="wp-submit" class="button button-primary button-large" value="<?php esc_attr_e( 'Register' ); ?>" /></p>
+	</form>
+
+	<p id="nav">
+	<a href="<?php echo esc_url( wp_login_url() ); ?>"><?php _e( 'Log in' ); ?></a>
+		<?php echo esc_html( $login_link_separator ); ?>
+	<a href="<?php echo esc_url( wp_lostpassword_url() ); ?>"><?php _e( 'Lost your password?' ); ?></a>
+	</p>
+
+		<?php
+		login_footer( 'user_login' );
+
+		break;
+
+	case 'confirmaction':
+		if ( ! isset( $_GET['request_id'] ) ) {
+			wp_die( __( 'Missing request ID.' ) );
+		}
+
+		if ( ! isset( $_GET['confirm_key'] ) ) {
+			wp_die( __( 'Missing confirm key.' ) );
+		}
+
+		$request_id = (int) $_GET['request_id'];
+		$key        = sanitize_text_field( wp_unslash( $_GET['confirm_key'] ) );
+		$result     = wp_validate_user_request_key( $request_id, $key );
+
+		if ( is_wp_error( $result ) ) {
+			wp_die( $result );
+		}
+
 		/**
 		 * Fires an action hook when the account action has been confirmed by the user.
 		 *
@@ -925,6 +987,20 @@ switch ( $action ) {
 				<?php
 				exit;
 			}
+
+			if ( ( empty( $redirect_to ) || $redirect_to == 'wp-admin/' || $redirect_to == admin_url() ) ) {
+				// If the user doesn't belong to a blog, send them to user admin. If the user can't edit posts, send them to their profile.
+				if ( is_multisite() && ! get_active_blog_for_user( $user->ID ) && ! is_super_admin( $user->ID ) ) {
+					$redirect_to = user_admin_url();
+				} elseif ( is_multisite() && ! $user->has_cap( 'read' ) ) {
+					$redirect_to = get_dashboard_url( $user->ID );
+				} elseif ( ! $user->has_cap( 'edit_posts' ) ) {
+					$redirect_to = $user->has_cap( 'read' ) ? admin_url( 'profile.php' ) : home_url();
+				}
+
+				wp_redirect( $redirect_to );
+				exit();
+			}
 			wp_safe_redirect( $redirect_to );
 			exit();
 		}
@@ -962,6 +1038,100 @@ switch ( $action ) {
 			}
 		}
 
+		/**
+		 * Filters the login page errors.
+		 *
+		 * @since 3.6.0
+		 *
+		 * @param object $errors      WP Error object.
+		 * @param string $redirect_to Redirect destination URL.
+		 */
+		$errors = apply_filters( 'wp_login_errors', $errors, $redirect_to );
+
+		// Clear any stale cookies.
+		if ( $reauth ) {
+			wp_clear_auth_cookie();
+		}
+
+		login_header( __( 'Log In' ), '', $errors );
+
+		if ( isset( $_POST['log'] ) ) {
+			$user_login = ( 'incorrect_password' == $errors->get_error_code() || 'empty_password' == $errors->get_error_code() ) ? esc_attr( wp_unslash( $_POST['log'] ) ) : '';
+		}
+		$rememberme = ! empty( $_POST['rememberme'] );
+
+		if ( $errors->has_errors() ) {
+			$aria_describedby_error = ' aria-describedby="login_error"';
+		} else {
+			$aria_describedby_error = '';
+		}
+		?>
+
+	<form name="loginform" id="loginform" action="<?php echo esc_url( site_url( 'wp-login.php', 'login_post' ) ); ?>" method="post">
+	<p>
+		<label for="user_login"><?php _e( 'Username or Email Address' ); ?><br />
+		<input type="text" name="log" id="user_login"<?php echo $aria_describedby_error; ?> class="input" value="<?php echo esc_attr( $user_login ); ?>" size="20" autocapitalize="off" /></label>
+	</p>
+	<p>
+		<label for="user_pass"><?php _e( 'Password' ); ?><br />
+		<input type="password" name="pwd" id="user_pass"<?php echo $aria_describedby_error; ?> class="input" value="" size="20" /></label>
+	</p>
+		<?php
+		/**
+		 * Fires following the 'Password' field in the login form.
+		 *
+		 * @since 2.1.0
+		 */
+		do_action( 'login_form' );
+		?>
+	<p class="forgetmenot"><label for="rememberme"><input name="rememberme" type="checkbox" id="rememberme" value="forever" <?php checked( $rememberme ); ?> /> <?php esc_html_e( 'Remember Me' ); ?></label></p>
+	<p class="submit">
+		<input type="submit" name="wp-submit" id="wp-submit" class="button button-primary button-large" value="<?php esc_attr_e( 'Log In' ); ?>" />
+		<?php	if ( $interim_login ) { ?>
+		<input type="hidden" name="interim-login" value="1" />
+	<?php	} else { ?>
+		<input type="hidden" name="redirect_to" value="<?php echo esc_attr( $redirect_to ); ?>" />
+	<?php } ?>
+		<?php if ( $customize_login ) : ?>
+		<input type="hidden" name="customize-login" value="1" />
+	<?php endif; ?>
+		<input type="hidden" name="testcookie" value="1" />
+	</p>
+	</form>
+
+		<?php if ( ! $interim_login ) { ?>
+	<p id="nav">
+			<?php
+			if ( ! isset( $_GET['checkemail'] ) || ! in_array( $_GET['checkemail'], array( 'confirm', 'newpass' ) ) ) :
+				if ( get_option( 'users_can_register' ) ) :
+					$registration_url = sprintf( '<a href="%s">%s</a>', esc_url( wp_registration_url() ), __( 'Register' ) );
+
+					/** This filter is documented in wp-includes/general-template.php */
+					echo apply_filters( 'register', $registration_url );
+
+					echo esc_html( $login_link_separator );
+				endif;
+				?>
+		<a href="<?php echo esc_url( wp_lostpassword_url() ); ?>"><?php _e( 'Lost your password?' ); ?></a>
+			<?php endif; ?>
+	</p>
+	<?php } ?>
+
+	<script type="text/javascript">
+	function wp_attempt_focus(){
+	setTimeout( function(){ try{
+		<?php if ( $user_login ) { ?>
+	d = document.getElementById('user_pass');
+	d.value = '';
+	<?php } else { ?>
+	d = document.getElementById('user_login');
+			<?php if ( 'invalid_username' == $errors->get_error_code() ) { ?>
+	if( d.value != '' )
+	d.value = '';
+				<?php
+			}
+	}
+	?>
 	d.focus();
 	d.select();
 	} catch(e){}
