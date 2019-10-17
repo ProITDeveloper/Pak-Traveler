@@ -9,5 +9,18 @@
                 }
             });
         },
+        createControl: function (n, cm) {
+            return null;
+        },
+        getInfo: function () {
+            return {
+                longname: "Smart Slider 3",
+                author: 'Nextendweb',
+                authorurl: 'https://smartslider3.com',
+                infourl: 'https://smartslider3.com',
+                version: "3.2"
+            };
+        }
+    });
     tinymce.PluginManager.add('nextend2smartslider3', tinymce.plugins.nextend2smartslider3);
 })();
